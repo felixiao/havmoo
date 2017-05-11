@@ -23,7 +23,7 @@ class MongoHelper:
         av = avs.find_one({'_id':data['_id']})
         if av is None:
             av = avs.insert(data)
-            print("ID = "+data['_id'])
+            # print("Add "+data['_id'])
 
     def insert_multi(self,data):
         for av in data:
@@ -39,13 +39,20 @@ class MongoHelper:
         new_title = new_title.strip(' ')
         return new_title
 
-    def get_one_by(self,key,value):
+    def get_by(self,key,value):
         results = self.db['av'].find({key:value})
         return results
 
+    def get_one_by(self,key,value):
+        result = self.db['av'].find_one({key:value})
+        return result
+
+    def is_Not_Exist(self,ID):
+        return self.db['av'].find({'_id':ID}) is None
+
     def update_one_by_id(self,data):
         song = self.db['av'].update_one(
-            filter={'_id': data['sid']+'a'+data['aid']+'s'+data['ssid']},
+            filter={'_id': data['_id']},
             update={'$set': data},
             upsert=True
         )
