@@ -1,5 +1,5 @@
 # -*- coding: utf-8-*-
-import sys, requests,json, os, io
+import sys, requests,json, os, io, csv
 from bs4 import BeautifulSoup
 from multiprocessing.dummy import Pool as ThreadPool
 from mongohelp import MongoHelper
@@ -8,10 +8,10 @@ from bson.json_util import dumps
 from bson import json_util
 from multiprocessing.dummy import Pool as ThreadPool  # 线程池
 class HtmlParser:
-    def __init__(self,url='https://avio.pw/cn/released/',pages=range(2,500)):
+    def __init__(self,url='https://avio.pw/cn/released/',pages=range(2,10)):
         self.session = requests.session()
         self.entry_url = url
-        self.search_url = 'https://www.javbus7.com/'
+        self.search_url = 'https://avio.pw/cn/'
         self.mongo = MongoHelper()
         self.pages = pages
         self.error_ids = []
@@ -156,8 +156,10 @@ if __name__ == '__main__':
 
     mongo = MongoHelper()
     datas = []
+    datacsv = []
     for av in mongo.get_collection():
         data ={}
+        datac=[]
         data["_id"] = av["_id"]
         data["Date"] = av["Date"]
         data["Title"] = av["Title"]
@@ -175,7 +177,30 @@ if __name__ == '__main__':
         data["Stars"] = av["Stars"]
         data["Cover"] = av["Cover"]
         data["Samples"] = av["Samples"]
+        datac.append(av["_id"])
+        datac.append(av["Date"])
+        datac.append(av["Title"])
+        datac.append(av["URL"])
+        datac.append(av["Length"])
+        datac.append(av["Studio"])
+        datac.append(av["StudioLink"])
+        datac.append(av["Label"])
+        datac.append(av["LabelLink"])
+        datac.append(av["Director"])
+        datac.append(av["DirectorLink"])
+        datac.append(av["Series"])
+        datac.append(av["SeriesLink"])
+        datac.append(av["Genres"])
+        datac.append(av["Stars"])
+        datac.append(av["Cover"])
+        datac.append(av["Samples"])
+        datacsv.append(datac)
         datas.append(data)
+
+    with open('./data/avs.csv', 'w', encoding='utf8') as csvfile:
+        spamwriter = csv.writer(csvfile)
+        spamwriter.writerow(['_id', 'Date', 'Title','URL', 'Length', 'Studio', 'StudioLink', 'Label', 'LabelLink', 'Director', 'DirectorLink','Series','SeriesLink','Genres','Stars','Cover','Samples'])
+        spamwriter.writerows(datacsv)
 
     with io.open('./data/avs.json', 'w', encoding='utf8') as outfile:
         data = json.dumps(datas, sort_keys = True, indent = 4, ensure_ascii=False)
