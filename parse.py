@@ -1,5 +1,6 @@
 # -*- coding: utf-8-*-
 import sys, requests,json, os, io, csv
+from datetime import datetime
 from bs4 import BeautifulSoup
 from multiprocessing.dummy import Pool as ThreadPool
 from mongohelp import MongoHelper
@@ -7,15 +8,21 @@ from bson import Binary, Code
 from bson.json_util import dumps
 from bson import json_util
 from multiprocessing.dummy import Pool as ThreadPool  # 线程池
+from progressbar import ProgressBar
+from concurrent.futures import ProcessPoolExecutor
+from requests_futures.sessions import FuturesSession
+from requests import Session
 class HtmlParser:
-    def __init__(self,url='https://avio.pw/cn/released/',pages=range(2,10)):
-        self.session = requests.session()
+    def __init__(self,url='https://avio.pw/cn/released/',pages=range(2,298)):
+        # self.session = requests.session()
+        self.session = FuturesSession(executor=ProcessPoolExecutor(max_workers=16),session=Session())
         self.entry_url = url
-        self.search_url = 'https://avio.pw/cn/'
+        self.search_url = 'https://www.javbus7.com/'
         self.mongo = MongoHelper()
         self.pages = pages
         self.error_ids = []
         self.error_pages = []
+        self.bar = ProgressBar(total=len(pages))
 
     def get_error(self):
         return self.error_ids
@@ -30,15 +37,17 @@ class HtmlParser:
         pool.join()
 
     def get_html(self,url):
-        global bar
         User_Agent = 'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:43.0) Gecko/20100101 Firefox/43.0'
         header = {}
         header['User-Agent'] = User_Agent
-        proxy = [{'http':'http://183.245.146.39:139'},
-                 {'http':'http://182.88.29.70:8123'}]
+        prx = {'http':'http://117.90.2.178:9000',
+               'http':'http://121.232.144.206:9000',
+               'http':'http://121.232.145.197:9000',
+               'http':'http://111.155.116.196:8123',
+               'http':'http://118.117.138.29:9000'}
         try:
             # print("检索："+ID)
-            return self.session.get(url,timeout=5,headers=header,proxies=proxy).content
+            return self.session.get(url,timeout=5,headers=header).result().content
         except requests.exceptions.ConnectionError:
             sys.stdout.write(' ' * 79 + '\r')
             sys.stdout.write('ConnectionError @ '+url)
@@ -49,25 +58,31 @@ class HtmlParser:
             return
 
     def parse_page(self,page):
-        global bar
-        resp = self.get_html(self.entry_url+"page/"+str(page))
-        html = BeautifulSoup(resp,'html.parser')
-        div_bricks = html.find('div',id="waterfall")
-        if div_bricks is None:
-            print("!!!分析第"+str(page)+"页出错!!!")
+        try:
+            resp = self.get_html(self.entry_url+"page/"+str(page))
+            html = BeautifulSoup(resp,'html.parser')
+            div_bricks = html.find('div',id="waterfall")
+            if div_bricks is None:
+                # print("!!!分析第"+str(page)+"页出错!!!")
+                self.error_pages.append(page)
+                self.bar.move()
+                self.bar.log('{0:0>4}'.format(page))
+                return
+            bricks = div_bricks.find_all('a')
+            count = len(bricks)
+            # print("第"+str(page)+"页")
+            for item in bricks:
+                ID = item.find_all("date")[0].string
+                Title = item.find_all("img")[0]['title']
+                Date = item.find_all("date")[1].string
+                URL = item['href']
+                av = self.mongo.get_one_by('_id',ID)
+                if av is None:
+                    self.parse_item(ID=ID,Title=Title,URL=URL)
+        except TypeError:
             self.error_pages.append(page)
-            return
-        bricks = div_bricks.find_all('a')
-        count = len(bricks)
-        print("第"+str(page)+"页")
-        for item in bricks:
-            ID = item.find_all("date")[0].string
-            Title = item.find_all("img")[0]['title']
-            Date = item.find_all("date")[1].string
-            URL = item['href']
-            av = self.mongo.get_one_by('_id',ID)
-            if av is None:
-                self.parse_item(ID=ID,Title=Title,URL=URL)
+        self.bar.move()
+        self.bar.log('{0:0>4}'.format(page))
 
     def parse_item(self,ID,Title,URL):
         data ={}
@@ -151,7 +166,13 @@ class HtmlParser:
         self.mongo.insert_one(data)
 
 if __name__ == '__main__':
+    downList=[]
+    with open('./data/error_page.txt') as data_file:
+        downList = json.load(data_file)
+
     parser = HtmlParser()
+    parser.pages = downList
+    parser.bar = ProgressBar(total=len(downList))
     parser.parse()
 
     mongo = MongoHelper()
@@ -197,17 +218,19 @@ if __name__ == '__main__':
         datacsv.append(datac)
         datas.append(data)
 
-    with open('./data/avs.csv', 'w', encoding='utf8') as csvfile:
+    sys.stdout.write(' ' * 79 + '\r')
+    sys.stdout.write('saved  '+str(len(datacsv))+' avs! parsed '+str(len(parser.pages)-len(parser.get_error_pages()))+'/'+str(len(parser.pages))+'\n')
+
+    seconds = (datetime.utcnow() - datetime(1, 1, 1)).total_seconds()
+    with open('./data/avs'+str(seconds)+'.csv', 'w', encoding='utf8') as csvfile:
         spamwriter = csv.writer(csvfile)
         spamwriter.writerow(['_id', 'Date', 'Title','URL', 'Length', 'Studio', 'StudioLink', 'Label', 'LabelLink', 'Director', 'DirectorLink','Series','SeriesLink','Genres','Stars','Cover','Samples'])
         spamwriter.writerows(datacsv)
-
-    with io.open('./data/avs.json', 'w', encoding='utf8') as outfile:
+    with io.open('./data/avs'+str(seconds)+'.json', 'w', encoding='utf8') as outfile:
         data = json.dumps(datas, sort_keys = True, indent = 4, ensure_ascii=False)
         outfile.write(data)
         outfile.close()
-
-    with io.open('./data/error.txt', 'w', encoding='utf8') as outfile:
+    with io.open('./data/error'+str(seconds)+'.txt', 'w', encoding='utf8') as outfile:
         data = json.dumps(parser.get_error(), sort_keys = True, indent = 4, ensure_ascii=False)
         outfile.write(data)
         outfile.close()
