@@ -20,8 +20,6 @@ class HtmlParser:
         self.search_url = 'https://www.javbus7.com/'
         self.mongo = MongoHelper()
         self.pages = pages
-        self.error_ids = []
-        self.error_pages = []
         self.bar = ProgressBar(total=len(pages))
 
     def get_error(self):
@@ -35,27 +33,6 @@ class HtmlParser:
         pool.map(self.parse_page, self.pages)  # 将任务交给线程池，所有url都完成后再继续执行，与python的map方法类似
         pool.close()
         pool.join()
-
-    def get_html(self,url):
-        User_Agent = 'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:43.0) Gecko/20100101 Firefox/43.0'
-        header = {}
-        header['User-Agent'] = User_Agent
-        prx = {'http':'http://117.90.2.178:9000',
-               'http':'http://121.232.144.206:9000',
-               'http':'http://121.232.145.197:9000',
-               'http':'http://111.155.116.196:8123',
-               'http':'http://118.117.138.29:9000'}
-        try:
-            # print("检索："+ID)
-            return self.session.get(url,timeout=5,headers=header).result().content
-        except requests.exceptions.ConnectionError:
-            sys.stdout.write(' ' * 79 + '\r')
-            sys.stdout.write('ConnectionError @ '+url)
-            return
-        except requests.exceptions.ReadTimeout:
-            sys.stdout.write(' ' * 79 + '\r')
-            sys.stdout.write('ReadTimeout @ '+url)
-            return
 
     def parse_page(self,page):
         try:
@@ -164,77 +141,3 @@ class HtmlParser:
                 data["Samples"].append(s['href'])
 
         self.mongo.insert_one(data)
-
-if __name__ == '__main__':
-    downList=[]
-    with open('./data/error_page.txt') as data_file:
-        downList = json.load(data_file)
-
-    parser = HtmlParser()
-    parser.pages = downList
-    parser.bar = ProgressBar(total=len(downList))
-    parser.parse()
-
-    mongo = MongoHelper()
-    datas = []
-    datacsv = []
-    for av in mongo.get_collection():
-        data ={}
-        datac=[]
-        data["_id"] = av["_id"]
-        data["Date"] = av["Date"]
-        data["Title"] = av["Title"]
-        data["URL"] = av["URL"]
-        data["Length"] = av["Length"]
-        data["Studio"] = av["Studio"]
-        data["StudioLink"] = av["StudioLink"]
-        data["Label"] = av["Label"]
-        data["LabelLink"] = av["LabelLink"]
-        data["Director"] = av["Director"]
-        data["DirectorLink"] = av["DirectorLink"]
-        data["Series"] = av["Series"]
-        data["SeriesLink"] = av["SeriesLink"]
-        data["Genres"] = av["Genres"]
-        data["Stars"] = av["Stars"]
-        data["Cover"] = av["Cover"]
-        data["Samples"] = av["Samples"]
-        datac.append(av["_id"])
-        datac.append(av["Date"])
-        datac.append(av["Title"])
-        datac.append(av["URL"])
-        datac.append(av["Length"])
-        datac.append(av["Studio"])
-        datac.append(av["StudioLink"])
-        datac.append(av["Label"])
-        datac.append(av["LabelLink"])
-        datac.append(av["Director"])
-        datac.append(av["DirectorLink"])
-        datac.append(av["Series"])
-        datac.append(av["SeriesLink"])
-        datac.append(av["Genres"])
-        datac.append(av["Stars"])
-        datac.append(av["Cover"])
-        datac.append(av["Samples"])
-        datacsv.append(datac)
-        datas.append(data)
-
-    sys.stdout.write(' ' * 79 + '\r')
-    sys.stdout.write('saved  '+str(len(datacsv))+' avs! parsed '+str(len(parser.pages)-len(parser.get_error_pages()))+'/'+str(len(parser.pages))+'\n')
-
-    seconds = (datetime.utcnow() - datetime(1, 1, 1)).total_seconds()
-    with open('./data/avs'+str(seconds)+'.csv', 'w', encoding='utf8') as csvfile:
-        spamwriter = csv.writer(csvfile)
-        spamwriter.writerow(['_id', 'Date', 'Title','URL', 'Length', 'Studio', 'StudioLink', 'Label', 'LabelLink', 'Director', 'DirectorLink','Series','SeriesLink','Genres','Stars','Cover','Samples'])
-        spamwriter.writerows(datacsv)
-    with io.open('./data/avs'+str(seconds)+'.json', 'w', encoding='utf8') as outfile:
-        data = json.dumps(datas, sort_keys = True, indent = 4, ensure_ascii=False)
-        outfile.write(data)
-        outfile.close()
-    with io.open('./data/error'+str(seconds)+'.txt', 'w', encoding='utf8') as outfile:
-        data = json.dumps(parser.get_error(), sort_keys = True, indent = 4, ensure_ascii=False)
-        outfile.write(data)
-        outfile.close()
-    with io.open('./data/error_page.txt', 'w', encoding='utf8') as outfile:
-        data = json.dumps(parser.get_error_pages(), sort_keys = True, indent = 4, ensure_ascii=False)
-        outfile.write(data)
-        outfile.close()
