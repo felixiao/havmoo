@@ -1,9 +1,6 @@
 # -*- coding: utf-8-*-
 import sys, requests, json, os, io
 from bs4 import BeautifulSoup
-from bson import Binary, Code
-from bson.json_util import dumps
-from bson import json_util
 from concurrent.futures import ProcessPoolExecutor
 from requests_futures.sessions import FuturesSession
 from requests import Session
@@ -18,20 +15,8 @@ class HtmlParser:
         genre = {}
         star = {}
         downloads = {}
-        data["_id"] = ID
+        data["ID"] = ID.upper()
         data["URL"] = self.search_url+ID
-        data["Title"] = ""
-        data["Studio"] = ""
-        data["StudioLink"] = ""
-        data["Label"] = ""
-        data["LabelLink"] = ""
-        data["Director"] = ""
-        data["DirectorLink"] = ""
-        data["Series"] = ""
-        data["SeriesLink"] = ""
-        data["Cover"] = ""
-        data["Genres"] = {}
-        data["Stars"] = {}
         data["Samples"] = []
         data["Downloads"] = []
         User_Agent = 'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:43.0) Gecko/20100101 Firefox/43.0'
@@ -47,13 +32,14 @@ class HtmlParser:
                 return False
         data["Title"] =html.find('h3').text[len(ID)+1:]
         data["Cover"] = html.find('a',"bigImage")['href']
+        data["Thumb"] = "https://pics.javbus.com/thumb/"+data["Cover"].split('/')[-1].split('_')[0]+".jpg"
         ########## Date ###########
         d = info.find_all("p")[1].text[6:]
         data["Date"] = d
         # print("date: "+d)
         ######### Length###########
         l = info.find_all("p")[2].text[4:-2]
-        data["Length"] = int(l)
+        data["Duration"] = int(l)
         # print("Length: "+l)
         texts = info.find_all("a")
         for text in texts:
@@ -83,9 +69,18 @@ class HtmlParser:
         if st is not None and len(st) >0:
             for s in st:
                 link = s['href']
+                starresp = self.session.get(link,timeout=5,headers=header).result().content
+                starhtml = BeautifulSoup(starresp,'html.parser')
+                info = starhtml.find('div','avatar-box')
+                details = {}
+                details["Link"] = link
+                details["Avatar"] =info.find('img')["src"]
+                texts = info.find_all("p")
+                for text in texts:
+                    details[text.text.split(':')[0]] = text.text.split(':')[1]
                 name = s.text.strip()
-                star[name] = link
-                # print("Stars: "+name+ " : "+link)
+                star[name] = details
+
         data["Stars"] = star
 
         samples = html.find_all('a',"sample-box")
